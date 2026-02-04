@@ -2,6 +2,19 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    // Some dependencies (e.g. enigo) use Xlib internally while others use XCB.
+    // If multiple threads end up touching X11 without XInitThreads, XCB can abort with:
+    // "XInitThreads has not been called" / `xcb_xlib_threads_sequence_lost`.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("DISPLAY").is_some() {
+            // Safety: XInitThreads is expected to be called once, before any other Xlib calls.
+            unsafe {
+                x11::xlib::XInitThreads();
+            }
+        }
+    }
+
     #[cfg(target_os = "linux")]
     {
         if std::path::Path::new("/dev/dri").exists()

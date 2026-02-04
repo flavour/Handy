@@ -9,6 +9,7 @@ import { StartHidden } from "../StartHidden";
 import { AutostartToggle } from "../AutostartToggle";
 import { PasteMethodSetting } from "../PasteMethod";
 import { ClipboardHandlingSetting } from "../ClipboardHandling";
+import { OutputModeSetting } from "../OutputMode";
 import { useModelStore } from "../../../stores/modelStore";
 import { PostProcessingToggle } from "../PostProcessingToggle";
 import { AppendTrailingSpace } from "../AppendTrailingSpace";
@@ -38,6 +39,7 @@ export const AdvancedSettings: React.FC = () => {
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.advanced.groups.output")}>
+        <OutputModeSetting descriptionMode="tooltip" grouped={true} />
         <PasteMethodSetting descriptionMode="tooltip" grouped={true} />
         <ClipboardHandlingSetting descriptionMode="tooltip" grouped={true} />
       </SettingsGroup>

@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
+use crate::outputs::OutputMode;
+
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
 
@@ -111,9 +113,10 @@ pub enum OverlayPosition {
     Bottom,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelUnloadTimeout {
+    #[default]
     Never,
     Immediately,
     Min2,
@@ -134,9 +137,10 @@ pub enum PasteMethod {
     CtrlShiftV,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ClipboardHandling {
+    #[default]
     DontModify,
     CopyToClipboard,
 }
@@ -171,7 +175,12 @@ impl Default for KeyboardImplementation {
 
 impl Default for ModelUnloadTimeout {
     fn default() -> Self {
-        ModelUnloadTimeout::Never
+        // Default to HandyKeys only on macOS where it's well-tested.
+        // Windows and Linux use Tauri by default (handy-keys not sufficiently tested yet).
+        #[cfg(target_os = "macos")]
+        return KeyboardImplementation::HandyKeys;
+        #[cfg(not(target_os = "macos"))]
+        return KeyboardImplementation::Tauri;
     }
 }
 
@@ -182,12 +191,6 @@ impl Default for PasteMethod {
         return PasteMethod::Direct;
         #[cfg(not(target_os = "linux"))]
         return PasteMethod::CtrlV;
-    }
-}
-
-impl Default for ClipboardHandling {
-    fn default() -> Self {
-        ClipboardHandling::DontModify
     }
 }
 
@@ -224,7 +227,7 @@ pub enum SoundTheme {
 }
 
 impl SoundTheme {
-    fn as_str(&self) -> &'static str {
+    fn as_str(self) -> &'static str {
         match self {
             SoundTheme::Marimba => "marimba",
             SoundTheme::Pop => "pop",
@@ -232,11 +235,11 @@ impl SoundTheme {
         }
     }
 
-    pub fn to_start_path(&self) -> String {
+    pub fn to_start_path(self) -> String {
         format!("resources/{}_start.wav", self.as_str())
     }
 
-    pub fn to_stop_path(&self) -> String {
+    pub fn to_stop_path(self) -> String {
         format!("resources/{}_stop.wav", self.as_str())
     }
 }
@@ -291,6 +294,21 @@ pub struct AppSettings {
     pub paste_method: PasteMethod,
     #[serde(default)]
     pub clipboard_handling: ClipboardHandling,
+
+    #[serde(default)]
+    pub output_mode: OutputMode,
+    #[serde(default = "default_opencode_base_url")]
+    pub opencode_base_url: String,
+    #[serde(default = "default_openclaw_base_url")]
+    pub openclaw_base_url: String,
+    #[serde(default)]
+    pub openclaw_token: Option<String>,
+    #[serde(default)]
+    pub openclaw_session_key: Option<String>,
+    #[serde(default)]
+    pub discord_bot_token: Option<String>,
+    #[serde(default)]
+    pub discord_channel_id: Option<String>,
     #[serde(default = "default_post_process_enabled")]
     pub post_process_enabled: bool,
     #[serde(default = "default_post_process_provider_id")]
@@ -388,6 +406,14 @@ fn default_sound_theme() -> SoundTheme {
 
 fn default_post_process_enabled() -> bool {
     false
+}
+
+fn default_opencode_base_url() -> String {
+    "http://127.0.0.1:4096".to_string()
+}
+
+fn default_openclaw_base_url() -> String {
+    "http://127.0.0.1:18789".to_string()
 }
 
 fn default_app_language() -> String {
@@ -541,6 +567,8 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
 
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
 
+pub const WAKEWORD_ENABLED_KEY: &str = "wakeword_enabled";
+
 pub fn get_default_settings() -> AppSettings {
     #[cfg(target_os = "windows")]
     let default_shortcut = "ctrl+space";
@@ -599,6 +627,15 @@ pub fn get_default_settings() -> AppSettings {
         recording_retention_period: default_recording_retention_period(),
         paste_method: PasteMethod::default(),
         clipboard_handling: ClipboardHandling::default(),
+
+        output_mode: OutputMode::default(),
+        opencode_base_url: default_opencode_base_url(),
+        openclaw_base_url: default_openclaw_base_url(),
+        openclaw_token: None,
+        openclaw_session_key: None,
+        discord_bot_token: None,
+        discord_channel_id: None,
+
         post_process_enabled: default_post_process_enabled(),
         post_process_provider_id: default_post_process_provider_id(),
         post_process_providers: default_post_process_providers(),
@@ -654,9 +691,11 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 
                 // Merge default bindings into existing settings
                 for (key, value) in default_settings.bindings {
-                    if !settings.bindings.contains_key(&key) {
-                        debug!("Adding missing binding: {}", key);
-                        settings.bindings.insert(key, value);
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        settings.bindings.entry(key)
+                    {
+                        debug!("Adding missing binding: {}", e.key());
+                        e.insert(value);
                         updated = true;
                     }
                 }
@@ -719,6 +758,25 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
         .expect("Failed to initialize store");
 
     store.set("settings", serde_json::to_value(&settings).unwrap());
+}
+
+pub fn get_wakeword_enabled(app: &AppHandle) -> bool {
+    let store = app
+        .store(SETTINGS_STORE_PATH)
+        .expect("Failed to initialize store");
+
+    store
+        .get(WAKEWORD_ENABLED_KEY)
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+pub fn set_wakeword_enabled(app: &AppHandle, enabled: bool) {
+    let store = app
+        .store(SETTINGS_STORE_PATH)
+        .expect("Failed to initialize store");
+
+    store.set(WAKEWORD_ENABLED_KEY, serde_json::Value::Bool(enabled));
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {

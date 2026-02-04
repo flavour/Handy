@@ -15,6 +15,8 @@ use crate::audio_toolkit::{
     VoiceActivityDetector,
 };
 
+type SpeechFrameCallback = Arc<dyn Fn(&[f32]) + Send + Sync + 'static>;
+
 enum Cmd {
     Start,
     Stop(mpsc::Sender<Vec<f32>>),
@@ -28,7 +30,7 @@ pub struct AudioRecorder {
     vad: Option<Arc<Mutex<Box<dyn vad::VoiceActivityDetector>>>>,
     level_cb: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync + 'static>>,
     // Speech frame tap: invoked for each VAD-gated 30ms speech frame
-    speech_frame_cb: Option<Arc<dyn Fn(&[f32]) + Send + Sync + 'static>>,
+    speech_frame_cb: Option<SpeechFrameCallback>,
 }
 
 impl AudioRecorder {
@@ -75,9 +77,51 @@ impl AudioRecorder {
         let host = crate::audio_toolkit::get_cpal_host();
         let device = match device {
             Some(dev) => dev,
-            None => host
-                .default_input_device()
-                .ok_or_else(|| Error::new(std::io::ErrorKind::NotFound, "No input device found"))?,
+            None => {
+                // On Linux (especially under PipeWire), CPAL's ALSA host may expose built-in
+                // devices like "pipewire" or "pulse" that can be more robust than selecting a
+                // specific hardware device directly.
+                #[cfg(target_os = "linux")]
+                {
+                    if let Ok(mut devices) = host.input_devices() {
+                        if let Some(dev) =
+                            devices.find(|d| d.name().ok().is_some_and(|n| n == "pipewire"))
+                        {
+                            log::info!("Audio: using built-in ALSA device: pipewire");
+                            dev
+                        } else if let Ok(mut devices) = host.input_devices() {
+                            if let Some(dev) =
+                                devices.find(|d| d.name().ok().is_some_and(|n| n == "pulse"))
+                            {
+                                log::info!("Audio: using built-in ALSA device: pulse");
+                                dev
+                            } else {
+                                host.default_input_device().ok_or_else(|| {
+                                    Error::new(
+                                        std::io::ErrorKind::NotFound,
+                                        "No input device found",
+                                    )
+                                })?
+                            }
+                        } else {
+                            host.default_input_device().ok_or_else(|| {
+                                Error::new(std::io::ErrorKind::NotFound, "No input device found")
+                            })?
+                        }
+                    } else {
+                        host.default_input_device().ok_or_else(|| {
+                            Error::new(std::io::ErrorKind::NotFound, "No input device found")
+                        })?
+                    }
+                }
+
+                #[cfg(not(target_os = "linux"))]
+                {
+                    host.default_input_device().ok_or_else(|| {
+                        Error::new(std::io::ErrorKind::NotFound, "No input device found")
+                    })?
+                }
+            }
         };
 
         let thread_device = device.clone();
@@ -219,10 +263,19 @@ impl AudioRecorder {
     fn get_preferred_config(
         device: &cpal::Device,
     ) -> Result<cpal::SupportedStreamConfig, Box<dyn std::error::Error>> {
+        // Prefer the device default config and resample to 16kHz in the consumer.
+        // Some devices/drivers claim to support 16kHz but error at runtime (e.g. ALSA POLLERR).
+        let default_config = device.default_input_config()?;
+
+        // Optional: try to open the stream at 16kHz if explicitly requested.
+        // This is useful for debugging and for devices that truly support native 16kHz.
+        if std::env::var_os("HANDY_AUDIO_TRY_16K").is_none() {
+            return Ok(default_config);
+        }
+
         let supported_configs = device.supported_input_configs()?;
         let mut best_config: Option<cpal::SupportedStreamConfigRange> = None;
 
-        // Try to find a config that supports 16kHz, prioritizing better formats
         for config_range in supported_configs {
             if config_range.min_sample_rate().0 <= constants::WHISPER_SAMPLE_RATE
                 && config_range.max_sample_rate().0 >= constants::WHISPER_SAMPLE_RATE
@@ -250,8 +303,7 @@ impl AudioRecorder {
             return Ok(config.with_sample_rate(cpal::SampleRate(constants::WHISPER_SAMPLE_RATE)));
         }
 
-        // If no config supports 16kHz, fall back to default
-        Ok(device.default_input_config()?)
+        Ok(default_config)
     }
 }
 
@@ -261,7 +313,7 @@ fn run_consumer(
     sample_rx: mpsc::Receiver<Vec<f32>>,
     cmd_rx: mpsc::Receiver<Cmd>,
     level_cb: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync + 'static>>,
-    speech_cb: Option<Arc<dyn Fn(&[f32]) + Send + Sync + 'static>>,
+    speech_cb: Option<SpeechFrameCallback>,
 ) {
     if speech_cb.is_some() {
         log::info!("Recorder consumer: speech_cb present");
@@ -293,7 +345,7 @@ fn run_consumer(
         recording: bool,
         vad: &Option<Arc<Mutex<Box<dyn vad::VoiceActivityDetector>>>>,
         out_buf: &mut Vec<f32>,
-        speech_cb: &Option<Arc<dyn Fn(&[f32]) + Send + Sync + 'static>>,
+        speech_cb: &Option<SpeechFrameCallback>,
     ) {
         if let Some(vad_arc) = vad {
             let mut det = vad_arc.lock().unwrap();
@@ -325,12 +377,7 @@ fn run_consumer(
         }
     }
 
-    loop {
-        let raw = match sample_rx.recv() {
-            Ok(s) => s,
-            Err(_) => break, // stream closed
-        };
-
+    while let Ok(raw) = sample_rx.recv() {
         // ---------- spectrum processing ---------------------------------- //
         if let Some(buckets) = visualizer.feed(&raw) {
             if let Some(cb) = &level_cb {

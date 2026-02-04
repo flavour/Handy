@@ -4,13 +4,14 @@ use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, S
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
+use crate::outputs::{self, OutputMode};
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{self, show_recording_overlay, show_transcribing_overlay};
 use crate::ManagedToggleState;
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
-use log::{debug, error};
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -142,11 +143,8 @@ async fn maybe_post_process_transcription(
     {
         Ok(Some(content)) => {
             // Strip invisible Unicode characters that some LLMs (e.g., Qwen) may insert
-            let content = content
-                .replace('\u{200B}', "") // Zero-Width Space
-                .replace('\u{200C}', "") // Zero-Width Non-Joiner
-                .replace('\u{200D}', "") // Zero-Width Joiner
-                .replace('\u{FEFF}', ""); // Byte Order Mark / Zero-Width No-Break Space
+            // Zero-Width Space, Zero-Width Non-Joiner, Zero-Width Joiner, Byte Order Mark / Zero-Width No-Break Space
+            let content = content.replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FEFF}'], "");
             debug!(
                 "LLM post-processing succeeded for provider '{}'. Output length: {} chars",
                 provider.id,
@@ -383,26 +381,154 @@ impl ShortcutAction for TranscribeAction {
                                 }
                             });
 
-                            // Paste the final text (either processed or original)
-                            let ah_clone = ah.clone();
-                            let paste_time = Instant::now();
-                            ah.run_on_main_thread(move || {
-                                match utils::paste(final_text, ah_clone.clone()) {
-                                    Ok(()) => debug!(
-                                        "Text pasted successfully in {:?}",
-                                        paste_time.elapsed()
-                                    ),
-                                    Err(e) => error!("Failed to paste transcription: {}", e),
+                            fn cleanup_ui(ah: &AppHandle) {
+                                let ah_clone = ah.clone();
+                                ah.run_on_main_thread(move || {
+                                    utils::hide_recording_overlay(&ah_clone);
+                                    change_tray_icon(&ah_clone, TrayIconState::Idle);
+                                })
+                                .unwrap_or_else(|e| {
+                                    error!("Failed to cleanup UI on main thread: {:?}", e);
+                                });
+                            }
+
+                            fn paste_and_cleanup(ah: &AppHandle, text: String) {
+                                let ah_clone = ah.clone();
+                                let paste_time = Instant::now();
+                                ah.run_on_main_thread(move || {
+                                    match utils::paste(text, ah_clone.clone()) {
+                                        Ok(()) => {
+                                            debug!(
+                                                "Text pasted successfully in {:?}",
+                                                paste_time.elapsed()
+                                            )
+                                        }
+                                        Err(e) => error!("Failed to paste transcription: {}", e),
+                                    }
+                                    utils::hide_recording_overlay(&ah_clone);
+                                    change_tray_icon(&ah_clone, TrayIconState::Idle);
+                                })
+                                .unwrap_or_else(|e| {
+                                    error!("Failed to run paste on main thread: {:?}", e);
+                                    utils::hide_recording_overlay(ah);
+                                    change_tray_icon(ah, TrayIconState::Idle);
+                                });
+                            }
+
+                            info!("Output mode: {}", settings.output_mode);
+                            match settings.output_mode {
+                                OutputMode::OpenCode => {
+                                    let base_url = settings.opencode_base_url.trim();
+                                    info!("Sending transcript to OpenCode (base_url={})", base_url);
+                                    if base_url.is_empty() {
+                                        warn!(
+                                            "OpenCode output selected but base URL is empty; skipping output"
+                                        );
+                                        cleanup_ui(&ah);
+                                    } else {
+                                        match outputs::opencode::submit(base_url, &final_text).await
+                                        {
+                                            Ok(()) => {
+                                                info!(
+                                                    "Submitted transcript to OpenCode (base_url={})",
+                                                    base_url
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "OpenCode submit failed ({}): {}.",
+                                                    base_url, e
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                        }
+                                    }
                                 }
-                                // Hide the overlay after transcription is complete
-                                utils::hide_recording_overlay(&ah_clone);
-                                change_tray_icon(&ah_clone, TrayIconState::Idle);
-                            })
-                            .unwrap_or_else(|e| {
-                                error!("Failed to run paste on main thread: {:?}", e);
-                                utils::hide_recording_overlay(&ah);
-                                change_tray_icon(&ah, TrayIconState::Idle);
-                            });
+                                OutputMode::OpenClaw => {
+                                    let base_url = settings.openclaw_base_url.trim();
+                                    let token =
+                                        settings.openclaw_token.as_deref().unwrap_or("").trim();
+                                    let session_key = settings
+                                        .openclaw_session_key
+                                        .as_deref()
+                                        .map(str::trim)
+                                        .filter(|s| !s.is_empty());
+
+                                    info!("Sending transcript to OpenClaw (base_url={}, endpoint=/v1/chat/completions, session_key={})", base_url, session_key.is_some());
+                                    if base_url.is_empty() || token.is_empty() {
+                                        warn!(
+                                            "OpenClaw output selected but base_url/token not configured; skipping output"
+                                        );
+                                        cleanup_ui(&ah);
+                                    } else {
+                                        match outputs::openclaw::submit(
+                                            base_url,
+                                            token,
+                                            session_key,
+                                            &final_text,
+                                        )
+                                        .await
+                                        {
+                                            Ok(reply) => {
+                                                info!(
+                                                    "Submitted transcript to OpenClaw (base_url={}), reply: {:?}",
+                                                    base_url,
+                                                    reply.as_ref().map(|r| &r[..r.len().min(50)])
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "OpenClaw submit failed ({}): {}.",
+                                                    base_url, e
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                        }
+                                    }
+                                }
+                                OutputMode::Discord => {
+                                    let token =
+                                        settings.discord_bot_token.as_deref().unwrap_or("").trim();
+                                    let channel =
+                                        settings.discord_channel_id.as_deref().unwrap_or("").trim();
+
+                                    if token.is_empty() || channel.is_empty() {
+                                        warn!(
+                                            "Discord output selected but bot token/channel not configured; skipping output"
+                                        );
+                                        cleanup_ui(&ah);
+                                    } else {
+                                        info!(
+                                            "Sending transcript to Discord (channel_id={})",
+                                            channel
+                                        );
+                                        match outputs::discord::submit(token, channel, &final_text)
+                                            .await
+                                        {
+                                            Ok(msg_id) => {
+                                                info!(
+                                                    "Submitted transcript to Discord (channel={}), message_id={}",
+                                                    channel, msg_id
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "Discord submit failed (channel={}): {:#}.",
+                                                    channel, e
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                        }
+                                    }
+                                }
+                                OutputMode::Paste => {
+                                    info!("Output mode paste: pasting transcription");
+                                    paste_and_cleanup(&ah, final_text);
+                                }
+                            }
                         } else {
                             utils::hide_recording_overlay(&ah);
                             change_tray_icon(&ah, TrayIconState::Idle);

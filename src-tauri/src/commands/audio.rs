@@ -1,7 +1,7 @@
 use crate::audio_feedback;
 use crate::audio_toolkit::audio::{list_input_devices, list_output_devices};
 use crate::managers::audio::{AudioRecordingManager, MicrophoneMode};
-use crate::settings::{get_settings, write_settings};
+use crate::settings::{get_settings, get_wakeword_enabled, set_wakeword_enabled, write_settings};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -20,7 +20,7 @@ fn custom_sound_exists(app: &AppHandle, sound_type: &str) -> bool {
             format!("custom_{}.wav", sound_type),
             tauri::path::BaseDirectory::AppData,
         )
-        .map_or(false, |path| path.exists())
+        .is_ok_and(|path| path.exists())
 }
 
 #[tauri::command]
@@ -56,7 +56,20 @@ pub fn update_microphone_mode(app: AppHandle, always_on: bool) -> Result<(), Str
     };
 
     rm.update_mode(new_mode)
-        .map_err(|e| format!("Failed to update microphone mode: {}", e))
+        .map_err(|e| format!("Failed to update microphone mode: {}", e))?;
+
+    // Keep wake-word state consistent with microphone availability.
+    // The persisted wake-word flag is stored separately in the settings store.
+    if always_on {
+        if get_wakeword_enabled(&app) {
+            rm.enable_wakeword(false, 0.5)
+                .map_err(|e| format!("Failed to enable wake-word: {}", e))?;
+        }
+    } else {
+        rm.disable_wakeword();
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -208,7 +221,10 @@ pub fn start_wakeword(app: AppHandle, threshold: Option<f32>) -> Result<(), Stri
     let thr = threshold.unwrap_or(0.5);
     let rm = app.state::<Arc<AudioRecordingManager>>();
     rm.enable_wakeword(false, thr)
-        .map_err(|e| format!("Failed to set wake-word flag: {}", e))
+        .map_err(|e| format!("Failed to set wake-word flag: {}", e))?;
+
+    set_wakeword_enabled(&app, true);
+    Ok(())
 }
 
 #[tauri::command]
@@ -216,6 +232,7 @@ pub fn start_wakeword(app: AppHandle, threshold: Option<f32>) -> Result<(), Stri
 pub fn stop_wakeword(app: AppHandle) -> Result<(), String> {
     let rm = app.state::<Arc<AudioRecordingManager>>();
     rm.disable_wakeword();
+    set_wakeword_enabled(&app, false);
     Ok(())
 }
 

@@ -19,11 +19,11 @@ use specta::Type;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
+use crate::outputs::OutputMode;
 use crate::settings::{
     self, get_settings, ClipboardHandling, KeyboardImplementation, LLMPrompt, OverlayPosition,
     PasteMethod, ShortcutBinding, SoundTheme, APPLE_INTELLIGENCE_DEFAULT_MODEL_ID,
     APPLE_INTELLIGENCE_PROVIDER_ID,
-};
 use crate::tray;
 
 // Note: Commands are accessed via shortcut::handy_keys:: in lib.rs
@@ -671,6 +671,77 @@ pub fn change_clipboard_handling_setting(app: AppHandle, handling: String) -> Re
         }
     };
     settings.clipboard_handling = parsed;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_output_mode_setting(app: AppHandle, mode: OutputMode) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.output_mode = mode;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_opencode_base_url_setting(app: AppHandle, base_url: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.opencode_base_url = base_url.trim().to_string();
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_openclaw_base_url_setting(app: AppHandle, base_url: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.openclaw_base_url = base_url.trim().to_string();
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_openclaw_token_setting(app: AppHandle, token: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    let token = token.trim().to_string();
+    settings.openclaw_token = if token.is_empty() { None } else { Some(token) };
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_openclaw_session_key_setting(app: AppHandle, session_key: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    let session_key = session_key.trim().to_string();
+    settings.openclaw_session_key = if session_key.is_empty() { None } else { Some(session_key) };
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_discord_bot_token_setting(app: AppHandle, token: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    let token = token.trim().to_string();
+    settings.discord_bot_token = if token.is_empty() { None } else { Some(token) };
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_discord_channel_id_setting(app: AppHandle, channel_id: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    let channel_id = channel_id.trim().to_string();
+    settings.discord_channel_id = if channel_id.is_empty() {
+        None
+    } else {
+        Some(channel_id)
+    };
     settings::write_settings(&app, settings);
     Ok(())
 }

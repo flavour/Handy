@@ -212,6 +212,46 @@
           "copyToClipboard": "Copy to Clipboard"
         }
       },
+      "outputMode": {
+        "title": "Output Destination",
+        "description": "Choose where transcribed text is sent. If an HTTP destination is misconfigured or fails, Handy falls back to Paste.",
+        "options": {
+          "paste": "Paste",
+          "opencode": "OpenCode",
+          "openclaw": "OpenClaw",
+          "discord": "Discord"
+        },
+        "opencodeBaseUrl": {
+          "title": "OpenCode Base URL",
+          "description": "Where to send transcripts for OpenCode.",
+          "placeholder": "http://127.0.0.1:4096"
+        },
+        "openclawBaseUrl": {
+          "title": "OpenClaw Base URL",
+          "description": "Where to send transcripts for OpenClaw.",
+          "placeholder": "http://127.0.0.1:18789"
+        },
+        "openclawToken": {
+          "title": "OpenClaw Token",
+          "description": "Optional. Leave blank to disable OpenClaw output (Paste fallback).",
+          "placeholder": "Bearer token"
+        },
+        "openclawSessionKey": {
+          "title": "OpenClaw Session Key",
+          "description": "Optional. Leave blank to start a new Agent session.",
+          "placeholder": "agent:main:discord:channel:"
+        },
+        "discordBotToken": {
+          "title": "Discord Bot Token",
+          "description": "Optional. Leave blank to disable Discord output (Paste fallback).",
+          "placeholder": "Bot token"
+        },
+        "discordChannelId": {
+          "title": "Discord Channel ID",
+          "description": "Optional. Leave blank to disable Discord output (Paste fallback).",
+          "placeholder": "123456789012345678"
+        }
+      },
       "translateToEnglish": {
         "label": "Translate to English",
         "description": "Automatically translate speech from other languages to English during transcription.",

@@ -9,6 +9,7 @@ mod helpers;
 mod input;
 mod llm_client;
 mod managers;
+mod outputs;
 mod overlay;
 mod settings;
 mod shortcut;
@@ -16,6 +17,7 @@ mod signal_handle;
 mod tray;
 mod tray_i18n;
 mod utils;
+#[cfg(debug_assertions)]
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, Builder};
 
@@ -140,7 +142,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // This matches the pattern used for Enigo initialization.
 
     #[cfg(unix)]
-    let signals = Signals::new(&[SIGUSR2]).unwrap();
+    let signals = Signals::new([SIGUSR2]).unwrap();
     // Set up SIGUSR2 signal handler for toggling transcription
     #[cfg(unix)]
     signal_handle::setup_signal_handler(app_handle.clone(), signals);
@@ -184,6 +186,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             }
             "copy_last_transcript" => {
                 tray::copy_last_transcript(app);
+            }
             "wakeword_start" => {
                 if let Some(rm) = app.try_state::<Arc<AudioRecordingManager>>() {
                     if let Err(e) = rm.enable_wakeword(false, 0.5) {
@@ -219,7 +222,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Get the autostart manager and configure based on user setting
     let autostart_manager = app_handle.autolaunch();
-    let settings = settings::get_settings(&app_handle);
+    let settings = settings::get_settings(app_handle);
 
     if settings.autostart_enabled {
         // Enable autostart if user has opted in
@@ -267,6 +270,13 @@ pub fn run() {
         shortcut::change_word_correction_threshold_setting,
         shortcut::change_paste_method_setting,
         shortcut::change_clipboard_handling_setting,
+        shortcut::change_output_mode_setting,
+        shortcut::change_opencode_base_url_setting,
+        shortcut::change_openclaw_base_url_setting,
+        shortcut::change_openclaw_token_setting,
+        shortcut::change_openclaw_session_key_setting,
+        shortcut::change_discord_bot_token_setting,
+        shortcut::change_discord_channel_id_setting,
         shortcut::change_post_process_enabled_setting,
         shortcut::change_experimental_enabled_setting,
         shortcut::change_post_process_base_url_setting,
@@ -350,7 +360,7 @@ pub fn run() {
         )
         .expect("Failed to export typescript bindings");
 
-    let mut builder = tauri::Builder::default().plugin(
+    let builder = tauri::Builder::default().plugin(
         LogBuilder::new()
             .level(log::LevelFilter::Trace) // Set to most verbose level globally
             .max_file_size(500_000)
@@ -376,7 +386,7 @@ pub fn run() {
 
     #[cfg(target_os = "macos")]
     {
-        builder = builder.plugin(tauri_nspanel::init());
+        let builder = builder.plugin(tauri_nspanel::init());
     }
 
     builder
@@ -398,7 +408,7 @@ pub fn run() {
         ))
         .manage(Mutex::new(ShortcutToggleStates::default()))
         .setup(move |app| {
-            let settings = get_settings(&app.handle());
+            let settings = get_settings(app.handle());
             let tauri_log_level: tauri_plugin_log::LogLevel = settings.log_level.into();
             let file_log_level: log::Level = tauri_log_level.into();
             // Store the file log level in the atomic for the filter to use
@@ -412,6 +422,14 @@ pub fn run() {
                 if let Err(e) = rm.init_wakeword_models(false, 0.5) {
                     // Propagate fatal initialization error
                     return Err(Box::<dyn std::error::Error>::from(e));
+                }
+
+                // Restore persisted wake-word state (only meaningful with Always-On mic)
+                if settings.always_on_microphone
+                    && settings::get_wakeword_enabled(&app_handle)
+                    && rm.enable_wakeword(false, 0.5).is_ok()
+                {
+                    log::info!("Wake-word: restored enabled state from settings store");
                 }
             }
 
@@ -442,7 +460,7 @@ pub fn run() {
             tauri::WindowEvent::ThemeChanged(theme) => {
                 log::info!("Theme changed to: {:?}", theme);
                 // Update tray icon to match new theme, maintaining idle state
-                utils::change_tray_icon(&window.app_handle(), utils::TrayIconState::Idle);
+                utils::change_tray_icon(window.app_handle(), utils::TrayIconState::Idle);
             }
             _ => {}
         })

@@ -237,7 +237,7 @@ impl ModelManager {
 
         for filename in &bundled_models {
             let bundled_path = self.app_handle.path().resolve(
-                &format!("resources/models/{}", filename),
+                format!("resources/models/{}", filename),
                 tauri::path::BaseDirectory::Resource,
             );
 
@@ -458,7 +458,7 @@ impl ModelManager {
 
         // Download with progress
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| {
+            let chunk = chunk.inspect_err(|_e| {
                 // Mark as not downloading on error
                 {
                     let mut models = self.available_models.lock().unwrap();
@@ -466,7 +466,6 @@ impl ModelManager {
                         model.is_downloading = false;
                     }
                 }
-                e
             })?;
 
             file.write_all(&chunk)?;

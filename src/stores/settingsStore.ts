@@ -114,6 +114,19 @@ const settingUpdaters: {
   paste_method: (value) => commands.changePasteMethodSetting(value as string),
   clipboard_handling: (value) =>
     commands.changeClipboardHandlingSetting(value as string),
+
+  output_mode: (value) => commands.changeOutputModeSetting(value ?? "paste"),
+  opencode_base_url: (value) =>
+    commands.changeOpencodeBaseUrlSetting(value ?? ""),
+  openclaw_base_url: (value) =>
+    commands.changeOpenclawBaseUrlSetting(value ?? ""),
+  openclaw_token: (value) => commands.changeOpenclawTokenSetting(value ?? ""),
+  openclaw_session_key: (value) =>
+    commands.changeOpenclawSessionKeySetting(value ?? ""),
+  discord_bot_token: (value) =>
+    commands.changeDiscordBotTokenSetting(value ?? ""),
+  discord_channel_id: (value) =>
+    commands.changeDiscordChannelIdSetting(value ?? ""),
   history_limit: (value) => commands.updateHistoryLimit(value as number),
   post_process_enabled: (value) =>
     commands.changePostProcessEnabledSetting(value as boolean),
