@@ -36,25 +36,41 @@ export const OutputModeSetting: React.FC<OutputModeProps> = React.memo(
         value: "discord",
         label: t("settings.advanced.outputMode.options.discord"),
       },
+      {
+        value: "matrix",
+        label: t("settings.advanced.outputMode.options.matrix"),
+      },
     ];
 
     const opencodeBaseUrl = (getSetting("opencode_base_url") ?? "") as string;
     const openclawBaseUrl = (getSetting("openclaw_base_url") ?? "") as string;
     const openclawToken = (getSetting("openclaw_token") ?? "") as string;
-    const openclawSessionKey = (getSetting("openclaw_session_key") ?? "") as string;
+    const openclawSessionKey = (getSetting("openclaw_session_key") ??
+      "") as string;
     const discordBotToken = (getSetting("discord_bot_token") ?? "") as string;
     const discordChannelId = (getSetting("discord_channel_id") ?? "") as string;
+    const matrixHomeserverUrl = (getSetting("matrix_homeserver_url") ??
+      "") as string;
+    const matrixAccessToken = (getSetting("matrix_access_token") ??
+      "") as string;
+    const matrixRoomId = (getSetting("matrix_room_id") ?? "") as string;
 
     const [localOpencodeBaseUrl, setLocalOpencodeBaseUrl] =
       useState(opencodeBaseUrl);
     const [localOpenclawBaseUrl, setLocalOpenclawBaseUrl] =
       useState(openclawBaseUrl);
     const [localOpenclawToken, setLocalOpenclawToken] = useState(openclawToken);
-    const [localOpenclawSessionKey, setLocalOpenclawSessionKey] = useState(openclawSessionKey);
+    const [localOpenclawSessionKey, setLocalOpenclawSessionKey] =
+      useState(openclawSessionKey);
     const [localDiscordBotToken, setLocalDiscordBotToken] =
       useState(discordBotToken);
     const [localDiscordChannelId, setLocalDiscordChannelId] =
       useState(discordChannelId);
+    const [localMatrixHomeserverUrl, setLocalMatrixHomeserverUrl] =
+      useState(matrixHomeserverUrl);
+    const [localMatrixAccessToken, setLocalMatrixAccessToken] =
+      useState(matrixAccessToken);
+    const [localMatrixRoomId, setLocalMatrixRoomId] = useState(matrixRoomId);
 
     useEffect(() => {
       setLocalOpencodeBaseUrl(opencodeBaseUrl);
@@ -80,6 +96,18 @@ export const OutputModeSetting: React.FC<OutputModeProps> = React.memo(
       setLocalDiscordChannelId(discordChannelId);
     }, [discordChannelId]);
 
+    useEffect(() => {
+      setLocalMatrixHomeserverUrl(matrixHomeserverUrl);
+    }, [matrixHomeserverUrl]);
+
+    useEffect(() => {
+      setLocalMatrixAccessToken(matrixAccessToken);
+    }, [matrixAccessToken]);
+
+    useEffect(() => {
+      setLocalMatrixRoomId(matrixRoomId);
+    }, [matrixRoomId]);
+
     const outputModeBusy = isUpdating("output_mode");
 
     const opencodeBusy = isUpdating("opencode_base_url") || outputModeBusy;
@@ -91,6 +119,11 @@ export const OutputModeSetting: React.FC<OutputModeProps> = React.memo(
     const discordBusy =
       isUpdating("discord_bot_token") ||
       isUpdating("discord_channel_id") ||
+      outputModeBusy;
+    const matrixBusy =
+      isUpdating("matrix_homeserver_url") ||
+      isUpdating("matrix_access_token") ||
+      isUpdating("matrix_room_id") ||
       outputModeBusy;
 
     // Persist config fields even if the user doesn't blur the input.
@@ -183,6 +216,51 @@ export const OutputModeSetting: React.FC<OutputModeProps> = React.memo(
       outputMode,
       localDiscordChannelId,
       discordChannelId,
+      updateSetting,
+      debounceMs,
+    ]);
+
+    useEffect(() => {
+      if (outputMode !== "matrix") return;
+      if (localMatrixHomeserverUrl === matrixHomeserverUrl) return;
+      const t = setTimeout(() => {
+        void updateSetting("matrix_homeserver_url", localMatrixHomeserverUrl);
+      }, debounceMs);
+      return () => clearTimeout(t);
+    }, [
+      outputMode,
+      localMatrixHomeserverUrl,
+      matrixHomeserverUrl,
+      updateSetting,
+      debounceMs,
+    ]);
+
+    useEffect(() => {
+      if (outputMode !== "matrix") return;
+      if (localMatrixAccessToken === matrixAccessToken) return;
+      const t = setTimeout(() => {
+        void updateSetting("matrix_access_token", localMatrixAccessToken);
+      }, debounceMs);
+      return () => clearTimeout(t);
+    }, [
+      outputMode,
+      localMatrixAccessToken,
+      matrixAccessToken,
+      updateSetting,
+      debounceMs,
+    ]);
+
+    useEffect(() => {
+      if (outputMode !== "matrix") return;
+      if (localMatrixRoomId === matrixRoomId) return;
+      const t = setTimeout(() => {
+        void updateSetting("matrix_room_id", localMatrixRoomId);
+      }, debounceMs);
+      return () => clearTimeout(t);
+    }, [
+      outputMode,
+      localMatrixRoomId,
+      matrixRoomId,
       updateSetting,
       debounceMs,
     ]);
@@ -353,6 +431,87 @@ export const OutputModeSetting: React.FC<OutputModeProps> = React.memo(
                 )}
                 variant="compact"
                 disabled={discordBusy}
+                className="min-w-[320px]"
+              />
+            </SettingContainer>
+          </>
+        )}
+
+        {outputMode === "matrix" && (
+          <>
+            <SettingContainer
+              title={t(
+                "settings.advanced.outputMode.matrixHomeserverUrl.title",
+              )}
+              description={t(
+                "settings.advanced.outputMode.matrixHomeserverUrl.description",
+              )}
+              descriptionMode={descriptionMode}
+              grouped={grouped}
+            >
+              <Input
+                type="text"
+                value={localMatrixHomeserverUrl}
+                onChange={(e) => setLocalMatrixHomeserverUrl(e.target.value)}
+                onBlur={() =>
+                  updateSetting(
+                    "matrix_homeserver_url",
+                    localMatrixHomeserverUrl,
+                  )
+                }
+                placeholder={t(
+                  "settings.advanced.outputMode.matrixHomeserverUrl.placeholder",
+                )}
+                variant="compact"
+                disabled={matrixBusy}
+                className="min-w-[360px]"
+              />
+            </SettingContainer>
+
+            <SettingContainer
+              title={t("settings.advanced.outputMode.matrixRoomId.title")}
+              description={t(
+                "settings.advanced.outputMode.matrixRoomId.description",
+              )}
+              descriptionMode={descriptionMode}
+              grouped={grouped}
+            >
+              <Input
+                type="text"
+                value={localMatrixRoomId}
+                onChange={(e) => setLocalMatrixRoomId(e.target.value)}
+                onBlur={() =>
+                  updateSetting("matrix_room_id", localMatrixRoomId)
+                }
+                placeholder={t(
+                  "settings.advanced.outputMode.matrixRoomId.placeholder",
+                )}
+                variant="compact"
+                disabled={matrixBusy}
+                className="min-w-[360px]"
+              />
+            </SettingContainer>
+
+            <SettingContainer
+              title={t("settings.advanced.outputMode.matrixAccessToken.title")}
+              description={t(
+                "settings.advanced.outputMode.matrixAccessToken.description",
+              )}
+              descriptionMode={descriptionMode}
+              grouped={grouped}
+            >
+              <Input
+                type="password"
+                value={localMatrixAccessToken}
+                onChange={(e) => setLocalMatrixAccessToken(e.target.value)}
+                onBlur={() =>
+                  updateSetting("matrix_access_token", localMatrixAccessToken)
+                }
+                placeholder={t(
+                  "settings.advanced.outputMode.matrixAccessToken.placeholder",
+                )}
+                variant="compact"
+                disabled={matrixBusy}
                 className="min-w-[320px]"
               />
             </SettingContainer>

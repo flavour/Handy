@@ -24,6 +24,7 @@ use crate::settings::{
     self, get_settings, ClipboardHandling, KeyboardImplementation, LLMPrompt, OverlayPosition,
     PasteMethod, ShortcutBinding, SoundTheme, APPLE_INTELLIGENCE_DEFAULT_MODEL_ID,
     APPLE_INTELLIGENCE_PROVIDER_ID,
+};
 use crate::tray;
 
 // Note: Commands are accessed via shortcut::handy_keys:: in lib.rs
@@ -714,10 +715,17 @@ pub fn change_openclaw_token_setting(app: AppHandle, token: String) -> Result<()
 
 #[tauri::command]
 #[specta::specta]
-pub fn change_openclaw_session_key_setting(app: AppHandle, session_key: String) -> Result<(), String> {
+pub fn change_openclaw_session_key_setting(
+    app: AppHandle,
+    session_key: String,
+) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     let session_key = session_key.trim().to_string();
-    settings.openclaw_session_key = if session_key.is_empty() { None } else { Some(session_key) };
+    settings.openclaw_session_key = if session_key.is_empty() {
+        None
+    } else {
+        Some(session_key)
+    };
     settings::write_settings(&app, settings);
     Ok(())
 }
@@ -742,6 +750,37 @@ pub fn change_discord_channel_id_setting(app: AppHandle, channel_id: String) -> 
     } else {
         Some(channel_id)
     };
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_matrix_homeserver_url_setting(
+    app: AppHandle,
+    homeserver_url: String,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.matrix_homeserver_url = homeserver_url.trim().to_string();
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_matrix_access_token_setting(app: AppHandle, token: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    let token = token.trim().to_string();
+    settings.matrix_access_token = if token.is_empty() { None } else { Some(token) };
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_matrix_room_id_setting(app: AppHandle, room_id: String) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.matrix_room_id = room_id.trim().to_string();
     settings::write_settings(&app, settings);
     Ok(())
 }

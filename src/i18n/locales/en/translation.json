@@ -219,7 +219,8 @@
           "paste": "Paste",
           "opencode": "OpenCode",
           "openclaw": "OpenClaw",
-          "discord": "Discord"
+          "discord": "Discord",
+          "matrix": "Matrix"
         },
         "opencodeBaseUrl": {
           "title": "OpenCode Base URL",
@@ -250,6 +251,21 @@
           "title": "Discord Channel ID",
           "description": "Optional. Leave blank to disable Discord output (Paste fallback).",
           "placeholder": "123456789012345678"
+        },
+        "matrixHomeserverUrl": {
+          "title": "Matrix Homeserver URL",
+          "description": "Where to send Matrix messages.",
+          "placeholder": "https://matrix.org"
+        },
+        "matrixRoomId": {
+          "title": "Matrix Room ID or Alias",
+          "description": "Where to post (room id like !abcdef:matrix.org, or alias like #myroom:matrix.org).",
+          "placeholder": "!roomid:server or #alias:server"
+        },
+        "matrixAccessToken": {
+          "title": "Matrix Access Token",
+          "description": "Optional. Leave blank to disable Matrix output (Paste fallback).",
+          "placeholder": "Access token"
         }
       },
       "translateToEnglish": {

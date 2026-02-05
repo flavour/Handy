@@ -127,6 +127,11 @@ const settingUpdaters: {
     commands.changeDiscordBotTokenSetting(value ?? ""),
   discord_channel_id: (value) =>
     commands.changeDiscordChannelIdSetting(value ?? ""),
+  matrix_homeserver_url: (value) =>
+    commands.changeMatrixHomeserverUrlSetting(value ?? ""),
+  matrix_access_token: (value) =>
+    commands.changeMatrixAccessTokenSetting(value ?? ""),
+  matrix_room_id: (value) => commands.changeMatrixRoomIdSetting(value ?? ""),
   history_limit: (value) => commands.updateHistoryLimit(value as number),
   post_process_enabled: (value) =>
     commands.changePostProcessEnabledSetting(value as boolean),

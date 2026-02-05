@@ -173,17 +173,6 @@ impl Default for KeyboardImplementation {
     }
 }
 
-impl Default for ModelUnloadTimeout {
-    fn default() -> Self {
-        // Default to HandyKeys only on macOS where it's well-tested.
-        // Windows and Linux use Tauri by default (handy-keys not sufficiently tested yet).
-        #[cfg(target_os = "macos")]
-        return KeyboardImplementation::HandyKeys;
-        #[cfg(not(target_os = "macos"))]
-        return KeyboardImplementation::Tauri;
-    }
-}
-
 impl Default for PasteMethod {
     fn default() -> Self {
         // Default to CtrlV for macOS and Windows, Direct for Linux
@@ -309,6 +298,13 @@ pub struct AppSettings {
     pub discord_bot_token: Option<String>,
     #[serde(default)]
     pub discord_channel_id: Option<String>,
+
+    #[serde(default = "default_matrix_homeserver_url")]
+    pub matrix_homeserver_url: String,
+    #[serde(default)]
+    pub matrix_access_token: Option<String>,
+    #[serde(default)]
+    pub matrix_room_id: String,
     #[serde(default = "default_post_process_enabled")]
     pub post_process_enabled: bool,
     #[serde(default = "default_post_process_provider_id")]
@@ -414,6 +410,10 @@ fn default_opencode_base_url() -> String {
 
 fn default_openclaw_base_url() -> String {
     "http://127.0.0.1:18789".to_string()
+}
+
+fn default_matrix_homeserver_url() -> String {
+    "https://matrix.org".to_string()
 }
 
 fn default_app_language() -> String {
@@ -635,6 +635,10 @@ pub fn get_default_settings() -> AppSettings {
         openclaw_session_key: None,
         discord_bot_token: None,
         discord_channel_id: None,
+
+        matrix_homeserver_url: default_matrix_homeserver_url(),
+        matrix_access_token: None,
+        matrix_room_id: String::new(),
 
         post_process_enabled: default_post_process_enabled(),
         post_process_provider_id: default_post_process_provider_id(),

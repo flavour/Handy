@@ -524,6 +524,53 @@ impl ShortcutAction for TranscribeAction {
                                         }
                                     }
                                 }
+                                OutputMode::Matrix => {
+                                    let homeserver_url = settings.matrix_homeserver_url.trim();
+                                    let token = settings
+                                        .matrix_access_token
+                                        .as_deref()
+                                        .unwrap_or("")
+                                        .trim();
+                                    let room_id = settings.matrix_room_id.trim();
+
+                                    if homeserver_url.is_empty()
+                                        || token.is_empty()
+                                        || room_id.is_empty()
+                                    {
+                                        warn!(
+                                            "Matrix output selected but homeserver/token/room_id not configured; skipping output"
+                                        );
+                                        cleanup_ui(&ah);
+                                    } else {
+                                        info!(
+                                            "Sending transcript to Matrix (homeserver={}, room_id={})",
+                                            homeserver_url, room_id
+                                        );
+                                        match outputs::matrix::submit(
+                                            homeserver_url,
+                                            token,
+                                            room_id,
+                                            &final_text,
+                                        )
+                                        .await
+                                        {
+                                            Ok(event_id) => {
+                                                info!(
+                                                    "Submitted transcript to Matrix (room_id={}), event_id={}",
+                                                    room_id, event_id
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                            Err(e) => {
+                                                error!(
+                                                    "Matrix submit failed (room_id={}): {:#}.",
+                                                    room_id, e
+                                                );
+                                                cleanup_ui(&ah);
+                                            }
+                                        }
+                                    }
+                                }
                                 OutputMode::Paste => {
                                     info!("Output mode paste: pasting transcription");
                                     paste_and_cleanup(&ah, final_text);
