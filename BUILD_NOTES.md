@@ -6,70 +6,15 @@ bun install
 bun run tauri dev
 ```
 
-Use Default mic tyo go via Pipewire, do NOT go direct to the Webcam.
+Use Default mic to go via Pipewire, do NOT go direct to the Webcam.
 Ctrl+Shift+D to enable Debug Panel on UI
 
-# Build Notes (Ubuntu 22.04)
-
-These notes capture the exact environment and commands used to build Handy in this workspace.
-
-## Repo State
-
-- Repo: `Handy`
-- Branch: `feat/wakeword`
-- Commit: `4445b56e673d41c411a1fc93628ac49dd442423a`
-- `git status -sb` at time of capture:
-  - Untracked models: `src-tauri/resources/models/embedding_model.onnx`, `src-tauri/resources/models/hey_mycroft_v0.1.onnx`, `src-tauri/resources/models/melspectrogram.onnx`
-
-## Host OS
-
-- Distro: Ubuntu 22.04.5 LTS (jammy)
-- Kernel: `6.8.0-87-generic` (x86_64)
-- PulseAudio (on PipeWire 0.3.48)
-
-## Toolchain Versions
-
-- Bun: `1.3.6`
-- Rust: `rustc 1.93.0` / `cargo 1.92.0`
-- CMake: `3.22.1`
-- C/C++ compiler: `cc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0`
-
-## OS Packages Installed (Exact)
-
-The full package inventory is captured as files in this repo:
-
-- All installed dpkg packages: `build-notes/ubuntu-22.04-dpkg-packages.tsv`
-  - sha256: `e192a8494a9c6497e527edcdd177ba010e7790015a2e8dec6d62408e34aeeafe`
-- Manually installed apt packages: `build-notes/ubuntu-22.04-apt-manual.txt`
-  - sha256: `6d3b08ab5cf7e38b896797bf40c52861ded52f6cd05e182ec2e8264230a55776`
-
-Commands used to capture:
+# Building
 
 ```bash
-dpkg-query -W -f='${Package}\t${Version}\n' | sort > build-notes/ubuntu-22.04-dpkg-packages.tsv
-apt-mark showmanual | sort > build-notes/ubuntu-22.04-apt-manual.txt
-sha256sum build-notes/ubuntu-22.04-dpkg-packages.tsv build-notes/ubuntu-22.04-apt-manual.txt
-```
-
-## Build Commands
-
-From repo root:
-
-```bash
-bun install
-```
-
-Model setup (required for development):
-
-```bash
-mkdir -p src-tauri/resources/models
-curl -o src-tauri/resources/models/silero_vad_v4.onnx https://blob.handy.computer/silero_vad_v4.onnx
-```
-
-Run in dev mode:
-
-```bash
-bun run tauri dev
+bun run tauri build --bundles deb
+cd src-tauri/target/release/bundle/deb
+sudo apt install ./Handy*.deb
 ```
 
 ## Known Failure Modes / Fixes

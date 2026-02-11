@@ -70,11 +70,11 @@ impl WakeWordManager {
                 ],
             ),
             (
-                "hey_mycroft_v0.1.onnx",
+                "freyja.onnx",
                 [
-                    "resources/models/hey_mycroft_v0.1.onnx",
-                    "models/hey_mycroft_v0.1.onnx",
-                    "src-tauri/resources/models/hey_mycroft_v0.1.onnx",
+                    "resources/models/freyja.onnx",
+                    "models/freyja.onnx",
+                    "src-tauri/resources/models/freyja.onnx",
                 ],
             ),
         ];
@@ -94,7 +94,7 @@ impl WakeWordManager {
             match *name {
                 "melspectrogram.onnx" => melspec_path = found,
                 "embedding_model.onnx" => embed_path = found,
-                "hey_mycroft_v0.1.onnx" => wake_path = found,
+                "freyja.onnx" => wake_path = found,
                 _ => {}
             }
         }
@@ -102,7 +102,7 @@ impl WakeWordManager {
         let (melspec_path, embed_path, wake_path) = (melspec_path, embed_path, wake_path);
         if melspec_path.is_none() || embed_path.is_none() || wake_path.is_none() {
             return Err(anyhow!(
-                "Wake-word models not found in resources/models (melspectrogram.onnx, embedding_model.onnx, hey_mycroft_v0.1.onnx)"
+                "Wake-word models not found in resources/models (melspectrogram.onnx, embedding_model.onnx, freyja.onnx)"
             ));
         }
         let melspec_path = melspec_path.unwrap();
@@ -459,8 +459,18 @@ mod tests {
         let mut mgr = WakeWordManager::new(&handle, false, 0.5)?;
 
         // Load test audio from resources.
-        let wav_path = std::path::Path::new("resources/hey_mycroft_test.wav");
-        let mut samples = read_wav_i16(wav_path)?;
+        // Prefer freyja naming, with legacy mycroft fallback for local fixtures.
+        let wav_path = if std::path::Path::new("resources/freyja_test.wav").exists() {
+            std::path::Path::new("resources/freyja_test.wav")
+        } else {
+            std::path::Path::new("resources/hey_mycroft_test.wav")
+        };
+        let mut samples = read_wav_i16(wav_path).with_context(|| {
+            format!(
+                "expected wakeword test wav at {:?} (or resources/freyja_test.wav)",
+                wav_path
+            )
+        })?;
 
         // Stream through the model in FRAME_SAMPLES chunks, track max probability.
         let mut max_p = 0.0f32;

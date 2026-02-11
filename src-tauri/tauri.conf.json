@@ -39,7 +39,7 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
-    "resources": ["resources/**/*"],
+    "resources": ["resources/**/*", "resources/models/freyja.onnx.data"],
     "license": "MIT",
     "icon": [
       "icons/32x32.png",
